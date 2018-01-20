@@ -12,7 +12,7 @@ typedef void (*socket_forward_func)(struct environment_t *, struct eoip_pkt_t *p
 typedef void (*tap_forward_func)(struct environment_t *, const char *frame, size_t frame_size);
 
 struct environment_t {
-    uint8_t tid;
+    uint16_t tid;
 
     int sock_fd, tap_fd;
 
