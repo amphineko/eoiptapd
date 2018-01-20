@@ -44,13 +44,13 @@ void resolve_addr(const char *addr, struct sockaddr_storage **out, socklen_t *ou
 }
 
 void resolve_args(int argc, char *argv[], char **if_name, struct sockaddr_storage **laddr_out,
-                  socklen_t *laddr_size, struct sockaddr_storage **raddr_out, socklen_t *raddr_size) {
+                  socklen_t *laddr_size, struct sockaddr_storage **raddr_out, socklen_t *raddr_size, uint16_t *tid) {
     int opt;
     bool if_name_set = false;
     bool laddr_set = false;
     bool raddr_set = false;
 
-    while ((opt = getopt(argc, argv, "i:l:r:")) != -1) {
+    while ((opt = getopt(argc, argv, "i:l:r:t:")) != -1) {
         switch (opt) {
             case 'i':
                 *if_name = malloc(strlen(optarg));
@@ -64,6 +64,9 @@ void resolve_args(int argc, char *argv[], char **if_name, struct sockaddr_storag
             case 'r':
                 resolve_addr(optarg, raddr_out, raddr_size);
                 raddr_set = true;
+                break;
+            case 't':
+                *tid = (uint16_t) atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "usage: %s -l local -r remote\n", argv[0]);
@@ -122,7 +125,7 @@ int main(int argc, char *argv[]) {
             .tap_forward = tap_send,
     };
 
-    resolve_args(argc, argv, &if_name, &laddr, &laddr_size, &(env.raddr), &(env.raddr_len));
+    resolve_args(argc, argv, &if_name, &laddr, &laddr_size, &(env.raddr), &(env.raddr_len), (uint16_t *) &(env.tid));
 
     socket_open(&(env.sock_fd), laddr, laddr_size);
     tap_open(&(env.tap_fd), if_name);
