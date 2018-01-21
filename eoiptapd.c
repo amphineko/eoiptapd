@@ -89,6 +89,8 @@ void resolve_args(int argc, char *argv[], char **if_name, struct sockaddr_storag
 }
 
 void socket_open(int *fd, const struct sockaddr_storage *addr, socklen_t size) {
+    int buf_size = 2 * sizeof(struct eoip_pkt_t), e;
+
     if ((*fd = socket(AF_INET, SOCK_RAW, 47)) == -1) {
         fprintf(stderr, "[ERROR] socket: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -96,6 +98,13 @@ void socket_open(int *fd, const struct sockaddr_storage *addr, socklen_t size) {
 
     if (bind(*fd, (const struct sockaddr *) addr, size) != 0) {
         fprintf(stderr, "[ERROR] bind: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    e = setsockopt(*fd, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size)) |
+        setsockopt(*fd, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size));
+    if (e != 0) {
+        fprintf(stderr, "[ERROR] setsockopt(socket): %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 }
