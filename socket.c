@@ -48,6 +48,22 @@ void socket_listen(struct environment_t *env) {
     }
 }
 
+void socket_send_ex(int fd, const void *buf, size_t buf_size, const struct sockaddr *dst, socklen_t dst_size) {
+    ssize_t send_size = -1;
+    int se = EAGAIN;
+
+    while ((send_size == -1) && (se == EAGAIN))
+        send_size = sendto(fd, buf, buf_size, MSG_DONTWAIT, dst, dst_size), se = errno;
+
+//    if ((send_size == -1) && (errno == EWOULDBLOCK)) {
+//        fprintf(stderr, "[WARN] sendto w/ MSG_DONTWAIT failed");
+//        send_size = sendto(fd, buf, buf_size, 0, dst, dst_size);
+//    }
+
+    if (send_size == -1)
+        fprintf(stderr, "[ERROR] sendto: %s\n", strerror(errno));
+}
+
 void socket_send(struct environment_t *env, struct eoip_pkt_t *pkt, size_t frame_size) {
     // ensure initialized by callee
     assert(pkt->hdr.gre_flags == htons(EOIP_GRE_FLAGS));
@@ -58,8 +74,6 @@ void socket_send(struct environment_t *env, struct eoip_pkt_t *pkt, size_t frame
     eoip_pkt_hdr_set_size((struct eoip_pkt_hdr_t *) pkt, (uint16_t) frame_size);
 
     // write to socket
-    if (sendto(env->sock_fd, pkt, sizeof(struct eoip_pkt_hdr_t) + frame_size, 0, (const struct sockaddr *) env->raddr,
-               env->raddr_len) == -1) {
-        fprintf(stderr, "[ERROR] sendto: %s\n", strerror(errno));
-    }
+    socket_send_ex(env->sock_fd, pkt, sizeof(struct eoip_pkt_hdr_t) + frame_size, (const struct sockaddr *) env->raddr,
+                   env->raddr_len);
 }
