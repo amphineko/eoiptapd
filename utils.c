@@ -44,16 +44,28 @@ int socket_open(int *fd, const struct sockaddr_storage *addr, socklen_t size) {
     return ret;
 }
 
-void tap_open(int *fd, const char *if_name) {
-    struct ifreq ifreq = {
-            .ifr_flags = IFF_NO_PI | IFF_TAP
-    };
+int tap_open(int *fd, const char *if_name) {
+    struct ifreq ifreq = {};
     strncpy(ifreq.ifr_name, if_name, IFNAMSIZ);
 
-    *fd = open("/dev/net/tun", O_RDWR);
-
-    if (ioctl(*fd, TUNSETIFF, &ifreq) != 0) {
-        fprintf(stderr, "[ERROR] ioctl(TUNSETIFF): %s\n", strerror(errno));
+    /* open /dev/net/tun */
+    if ((*fd = open("/dev/net/tun", O_RDWR)) < 0) {
+        fprintf(stderr, "[ERROR] open(/dev/net/tun): %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    ifreq.ifr_flags = IFF_TAP | IFF_NO_PI | IFF_MULTI_QUEUE;
+    if (ioctl(*fd, TUNSETIFF, &ifreq) != 0) {
+        if (errno == EINVAL) {
+            ifreq.ifr_flags = IFF_TAP | IFF_NO_PI;
+            if (ioctl(*fd, TUNSETIFF, &ifreq) == 0) {
+                fprintf(stderr, "[WARN] multi-queue tap not supported\n");
+                return EINVAL;
+            } else; // exit w/ error
+        } else; // exit w/ error
+    } else
+        return 0;
+
+    fprintf(stderr, "[ERROR] ioctl(TUNSETIFF): %s\n", strerror(errno));
+    exit(EXIT_FAILURE);
 }
