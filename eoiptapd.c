@@ -89,9 +89,41 @@ void resolve_args(int argc, char *argv[], char **if_name, struct sockaddr_storag
     exit(EXIT_FAILURE);
 }
 
+int create_fork(struct environment_t *env, struct sockaddr_storage *laddr, socklen_t laddr_size, char *if_name) {
+    bool cap = true;
+
+    if (socket_open(&(env->sock_fd), laddr, laddr_size) == ENOPROTOOPT)
+        cap = false;    // multiple sockets not supported
+    if (tap_open(&(env->tap_fd), if_name))
+        cap = false;    // multiple tap queue not supported
+
+    env->sock_pid = fork();
+    if (env->sock_pid == 0) {
+        socket_listen(env);
+        exit(EXIT_SUCCESS);
+    }
+    if (env->sock_pid == -1) {
+        fprintf(stderr, "[ERROR] fork(socket): %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    env->tap_pid = fork();
+    if (env->tap_pid == 0) {
+        tap_listen(env);
+        exit(EXIT_SUCCESS);
+    }
+    if (env->tap_pid == -1) {
+        fprintf(stderr, "[ERROR] fork(tap): %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    return cap;
+}
+
 int main(int argc, char *argv[]) {
     struct sockaddr_storage *laddr = malloc(sizeof(struct sockaddr_storage));
     socklen_t laddr_size;
+    long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
 
     char *if_name;
 
@@ -100,27 +132,20 @@ int main(int argc, char *argv[]) {
             .tap_forward = tap_send,
     };
 
+    struct children_t *children = malloc(sizeof(struct children_t) + sizeof(void *) * cpu_count);
+
     resolve_args(argc, argv, &if_name, &laddr, &laddr_size, &(env.raddr), &(env.raddr_len), (uint16_t *) &(env.tid));
 
-    socket_open(&(env.sock_fd), laddr, laddr_size);
-    tap_open(&(env.tap_fd), if_name);
+    fprintf(stderr, "[INFO] %ld processors found\n", cpu_count);
 
-    int sock = fork();
-    if (sock == 0) {
-        socket_listen(&env);
-        exit(EXIT_SUCCESS);
-    }
-    if (sock == -1) {
-        fprintf(stderr, "[ERROR] fork(socket): %s\n", strerror(errno));
-    }
+    for (long i = 0; i < cpu_count; i++) {
+        children->count++;
 
-    int tap = fork();
-    if (tap == 0) {
-        tap_listen(&env);
-        exit(EXIT_SUCCESS);
-    }
-    if (sock == -1) {
-        fprintf(stderr, "[ERROR] fork(tap): %s\n", strerror(errno));
+        children->children[i] = malloc(sizeof(struct environment_t));
+        memcpy(children->children[i], &env, sizeof(struct environment_t));
+
+        if (!create_fork(children->children[i], laddr, laddr_size, if_name))
+            break;
     }
 
     waitpid(-1, NULL, 0);
